@@ -1,0 +1,174 @@
+---
+title: "Cobb Douglas Production Function: Non Linear Optimization"
+author: "Carlos Pelayo"
+date: "4/24/2020"
+output: html_document
+---
+
+## non-linear optimization
+
+This Rmarkdown file demonstrates techniques for non-linear optimization, and is illustrated with data for the Cobb-Douglas production function, $y = A K^\alpha L^\beta$, K capital, L labor, and the exponents the elasticies of production by input.
+
+### Methods demonstrated:
+ 1. Grid search of space of parameters  
+ 2. non-linear optimization software, find values of the parameters that minimize the sum of squared errors, errors are (data-predicted)  
+ 3. non-linear optimizatin software, maximum likelihood- find values of the parameters that maximize the likelihood of the data assuming errors are normally distributed  
+ 4. log-transform to a linear model  
+ 
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(scatterplot3d)
+```
+
+Read in the data
+
+```{r}
+CobbDoug = read.csv('CobbDouglasData.csv')
+attach(CobbDoug)
+```
+
+
+```{r}
+plot(Cap, Q, pch=19, col='red', xlab= 'input values', ylab = 'output',
+     main='Cobb-Douglas Production function')
+points(Emp, Q, pch=19, col='blue')
+grid()
+```
+
+A two-dimensional plot would be nice..
+
+```{r}
+scatterplot3d(x=Cap,y=Emp,z=Q,color="steelblue",pch="$",angle=15, main="Cobb Douglas Production Function", xlab="Production",ylab="Labor Input",zlab="Capital Input",grid=TRUE)
+
+```
+
+Set up a non-linear loss function
+
+```{r}
+CDloss=function(parms, Q, Cap, Emp){
+  
+  A = parms[1]
+  alpha = parms[2]
+  beta = parms[3]
+  
+  Loss = 0
+  for (i in 1:length(Q)){
+    Loss = Loss + ((Q[i]-A*(Cap[i]^beta*Emp[i]^alpha))^2)
+  }
+  
+  return (log(Loss))
+}
+
+CDmle=function(parms, Q, Cap, Emp){
+  A = parms[1]
+  alpha = parms[2]
+  beta = parms[3]
+  
+  logLoss = 0
+  for (i in 1:length(Q)){
+    errorTerm= (Q[i]-A*(Cap[i]^beta*Emp[i]^alpha))
+    logLoss = logLoss - dnorm(errorTerm, log=T)
+  }
+  
+  return (log(logLoss))
+}
+```
+
+Test the loss function
+
+```{r}
+A = 1
+alpha = 0.5
+beta = 0.5
+parms=c(A, alpha, beta)
+print(CDloss(parms, Q, Cap, Emp))
+
+# better or worse than
+A = 0.75
+alpha = 0.2
+beta = 0.5
+parms=c(A, alpha, beta)
+print(CDloss(parms, Q, Cap, Emp))
+
+```
+## Grid search
+  not the best idea, can get close to an answer 
+
+```{r}
+
+for (A in seq(from=0.1, to = 3, length.out = 4))
+  for(a in seq(from=0.1, to = 1,length.out = 4))
+   for(b in seq(from=0.1, to = 1, length.out = 4)){
+     parms = c(A, a, b)
+      print(paste(A,"/" ,a,"/", b,"/", CDloss(parms, Q, Cap, Emp)))
+  }
+
+```
+
+## non linear optimization
+
+use function optim to find values of A, alpha, beta
+find values that minimize the loss function, loss = sum of sqrared errors.  This is a 'least squares' solution
+
+```{r}
+### Optimization
+parms = c(1, 0.75, 0.25)
+opt = optim(parms, CDloss,Q=Q,Cap=Cap,Emp=Emp)
+print(opt)
+parms = c(opt$par[1], opt$par[2], opt$par[3])
+print(CDloss(parms, Q, Cap,Emp))
+```
+
+## transform to logs
+
+```{r}
+logModel = glm(log(Q)~log(Cap)+log(Emp))
+summary(logModel)
+plot(logModel)
+A = exp(logModel$coefficients[1])
+alpha = logModel$coefficients[2]
+beta = logModel$coefficients[3]
+print(paste('A = ',A,' alpha = ', alpha,' beta =', beta))
+
+# CD loss at these values:
+parms=c(A, alpha, beta)
+print(paste('CD loss: ', CDloss(parms, Q, Cap, Emp)))
+```
+$$log(Q)=0.54+0.25*log(k)+0.77*log(L)$$
+$$Q=e^{0.54}*K^{0.23}+L^{0.77}$$
+
+## maximum likelihood estimation
+
+Wi 
+
+$\phi$ is the standard normal distribution
+
+
+```{r}
+hist(logModel$residuals)
+parms = c(2, 0.8, 0.2)
+opt = optim(parms, CDmle, Q=Q, Cap=Cap, Emp=Emp)
+print(opt)
+parms = c(opt$par[1], opt$par[2], opt$par[3])
+print(CDmle(parms, Q, Cap,Emp))
+
+```
+
+## Questions:
+### 1. what are the estimated values of A, alpha and beta?
+    In order to minimize the loss function, the values for the constants are as follow: $A$=1.3044599, $\alpha$=0.8287067, $\beta$=0.2215366. The result was acheieved by using the Maximum Likelihood estimation method.
+
+### 2. Confidence intervals on A, alpha, beta?
+
+  Confidence Interval for $\alpha$: 0.23 $\pm$ 1.96*0.02882
+
+  Confidence Interval for $\beta$: 0.77 $\pm$ 1.96*0.02735
+
+  Confidence Interval for $A$: 1.716$\pm$ $e^{0.2960}$
+
+### 3. Is production at constant return to scale?
+  If production is increasing or decreasing return to scale, which input is most  expensive? Production is at a constant return to scale. It is contstant because $\alpha$+$\beta$ is equal to 0.9976 which is almost equal to 1.
+
+### 4. What does the values of A mean?
+  $A$ is the total factor productivity, which is an efficiency parameter.
+
